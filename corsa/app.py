@@ -10,16 +10,21 @@ import tornado.log
 from corsa.proxy import ProxyHandler
 
 
-def run_proxy((host, port), app_path=None, debug=False):
+def run_proxy(bind, app_path=None, debug=False,
+    proxy_whitelist=None, origin_whitelist=None):
     handler = [
-        (r'/proxy/(.*)', ProxyHandler),
+        (r'/proxy/(.*)', ProxyHandler, {
+            'proxy_whitelist': proxy_whitelist,
+            'origin_whitelist': origin_whitelist,
+            }
+        ),
     ]
     if app_path:
         handler.append(
             (r'/app/(.*)', tornado.web.StaticFileHandler, {'path': app_path})
         )
     app = tornado.web.Application(handler, debug=debug)
-    app.listen(port, host)
+    app.listen(bind[1], bind[0])
     ioloop = tornado.ioloop.IOLoop.instance()
     ioloop.start()
 
@@ -50,6 +55,8 @@ def main():
     parser = optparse.OptionParser()
     parser.add_option('--app-dir')
     parser.add_option('-b', '--bind', default='localhost:8888')
+    parser.add_option('--allow-proxy', default=None)
+    parser.add_option('--allow-origin', default='SELF')
     parser.add_option('--debug', default=False, action='store_true')
 
     options, args = parser.parse_args()
@@ -65,8 +72,27 @@ def main():
         print("  Hosting %s at http://%s:%d/app/" % (options.app_dir, host, port),
             file=sys.stderr)
 
+    proxy_whitelist = []
+    if options.allow_proxy:
+        proxy_whitelist = set(options.allow_proxy.split(','))
+        if 'ALL' in proxy_whitelist:
+            proxy_whitelist = None
+
+    origin_whitelist = []
+    if options.allow_origin:
+        origin_whitelist = set(options.allow_origin.split(','))
+        if 'SELF' in origin_whitelist:
+            origin_whitelist.remove('SELF')
+            origin_whitelist.add('http://%s:%d' % (host, port))
+        if 'ALL' in origin_whitelist:
+            origin_whitelist = None
+
     try:
-        run_proxy((host, port), options.app_dir, debug=options.debug)
+        run_proxy((host, port), options.app_dir,
+            debug=options.debug,
+            proxy_whitelist=proxy_whitelist,
+            origin_whitelist=origin_whitelist,
+        )
     except KeyboardInterrupt:
         print("Exiting", file=sys.stderr)
 

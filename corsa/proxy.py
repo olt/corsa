@@ -1,4 +1,8 @@
-import urlparse
+try:
+    import urllib.parse as urlparse
+except ImportError:
+    # py2
+    import urlparse
 
 import tornado.httpclient
 import tornado.web
@@ -16,7 +20,34 @@ hop_by_hop_headers = set([
     'upgrade',
 ])
 
+
 class ProxyHandler(tornado.web.RequestHandler):
+    def __init__(self, *args, **kw):
+        self.proxy_whitelist = kw.pop('proxy_whitelist', None)
+        self.origin_whitelist = kw.pop('origin_whitelist', None)
+        super(ProxyHandler, self).__init__(*args, **kw)
+
+    def check_proxy_host(self, url_parts):
+        if self.proxy_whitelist is None:
+            return
+
+        url = '%s://%s' % (url_parts.scheme, url_parts.netloc)
+
+        if url in self.proxy_whitelist:
+            return
+
+        raise tornado.web.HTTPError(403)
+
+    def check_origin(self):
+        if self.origin_whitelist is None:
+            return
+
+        if 'Origin' not in self.request.headers:
+            raise tornado.web.HTTPError(403)
+
+        if self.request.headers['Origin'] not in self.origin_whitelist:
+            raise tornado.web.HTTPError(403)
+
     def response_handler(self, response):
         if response.error and not isinstance(response.error, tornado.httpclient.HTTPError):
             self.set_status(500)
@@ -26,10 +57,32 @@ class ProxyHandler(tornado.web.RequestHandler):
 
         self.set_status(response.code)
         # copy all but hop-by-hop headers
-        for header, v in response.headers.iteritems():
+        for header, v in response.headers.items():
             if header.lower() not in hop_by_hop_headers:
                 self.set_header(header, v)
-        self.set_header(' Access-Control-Allow-Origin', '*')
+
+        origin = self.request.headers.get('Origin', '*')
+        self.set_header('Access-Control-Allow-Origin', origin)
+
+        if self.request.method == 'OPTIONS':
+            if 'Access-Control-Request-Headers' in self.request.headers:
+                # allow all requested headers
+                self.set_header('Access-Control-Allow-Headers',
+                    self.request.headers.get('Access-Control-Request-Headers', ''))
+
+            self.set_header('Access-Control-Allow-Methods',
+                response.headers.get('Allow', ''))
+
+            if response.code == 405:
+                # fake OPTIONS response when source doesn't support it
+                # as OPTIONS is required for CORS preflight requests.
+                # the 405 response should contain the supported methods
+                # in the Allow header.
+                self.set_status(200)
+                self.clear_header('Content-Length')
+                self.finish()
+                return
+
         if response.body:
             self.write(response.body)
         self.finish()
@@ -38,6 +91,9 @@ class ProxyHandler(tornado.web.RequestHandler):
     def request_handler(self, url):
         url_parts = urlparse.urlparse(url)
         self.request.headers['Host'] = url_parts.netloc
+
+        self.check_proxy_host(url_parts)
+        self.check_origin()
 
         req = tornado.httpclient.HTTPRequest(
             url=url,
@@ -59,9 +115,10 @@ class ProxyHandler(tornado.web.RequestHandler):
                 raise
 
     # alias HTTP methods to generic request handler
-    SUPPORTED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'HEAD']
+    SUPPORTED_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'HEAD', 'OPTIONS']
     get = request_handler
     post = request_handler
     put = request_handler
     delete = request_handler
     head = request_handler
+    options = request_handler
