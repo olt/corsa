@@ -1,11 +1,12 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='Corsa',
+    name='corsa',
     version="0.1.0",
     description='CORS proxy and web server for static apps',
     author='Oliver Tonnhofer',
     author_email='olt@bogosoft.com',
+    url='https://github.com/olt/corsa',
     license='MIT',
     packages=find_packages(),
     include_package_data=True,
