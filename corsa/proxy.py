@@ -95,6 +95,8 @@ class ProxyHandler(tornado.web.RequestHandler):
         self.check_proxy_host(url_parts)
         self.check_origin()
 
+        if self.request.query:
+            url = url + '?' + self.request.query
         req = tornado.httpclient.HTTPRequest(
             url=url,
             method=self.request.method,
