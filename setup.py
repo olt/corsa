@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='corsa',
-    version="0.1.1",
+    version="0.1.2",
     description='CORS proxy and web server for static apps',
     author='Oliver Tonnhofer',
     author_email='olt@bogosoft.com',
