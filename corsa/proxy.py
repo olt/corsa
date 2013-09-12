@@ -55,6 +55,13 @@ class ProxyHandler(tornado.web.RequestHandler):
             self.finish()
             return
 
+        if response.code == 599:
+            # connection closed
+            self.set_status(502)
+            self.write('Bad gateway:\n' + str(response.error))
+            self.finish()
+            return
+
         self.set_status(response.code)
         # copy all but hop-by-hop headers
         for header, v in response.headers.items():
