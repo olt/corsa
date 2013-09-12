@@ -111,6 +111,7 @@ class ProxyHandler(tornado.web.RequestHandler):
             headers=self.request.headers,
             follow_redirects=False,
             allow_nonstandard_methods=True,
+            use_gzip=False, # otherwise tornado will decode proxied data
         )
 
         client = tornado.httpclient.AsyncHTTPClient()
